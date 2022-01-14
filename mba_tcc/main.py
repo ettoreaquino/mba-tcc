@@ -1,3 +1,6 @@
+from datetime import datetime
+import pandas as pd
+
 import plotly.express as px
 import plotly.graph_objs as go
 
@@ -14,11 +17,22 @@ class WindSpeedTower():
     def __init__(self, csv_path: str):
         
         self.data = translation.undisclosed(csv_path='datasets/wind.csv')
+
+    def check_missing(self):
+        missing = self.data.loc[(self.data.isnull().speed == True)]
+        fmt = '''{} missing values found!\nRepresenting {}% of the dataset'''
+        print(fmt.format(missing.shape[0], round(missing.shape[0]/self.data.shape[0]*100,4)))
+
+    def get_range(self, begin: datetime, end: datetime) -> pd.DataFrame:
+        '''Returns the dataset between the selected range'''
+        mask = (self.data.index > begin) & (self.data.index <= end)
+
+        return self.data.loc[mask]
         
     def plot_date(self, year: int, month: int=None, day: int=None):
         
         if year == None:
-            raise ValueError('Year cannot be empy')
+            raise ValueError('Year cannot be empty')
 
         if year!= None and month != None and day != None:
             df = self.data.loc[(self.data.index.year == year) & (self.data.index.month == month) & (self.data.index.day == day)]
@@ -96,3 +110,14 @@ class WindSpeedTower():
         fig.add_trace(year, row=5, col=1)
         
         fig.show()
+
+    def reindex_series(self):
+        '''Void function to reindex time series between begin and end'''
+        min_time = min(self.data.index)
+        max_time = max(self.data.index)
+
+        idx = pd.period_range(min_time, max_time, freq='10T')
+        df = self.data.reindex(idx)
+        
+        self.data = df
+        print('Tower data reindexed between {} and {}'.format(min_time, max_time))

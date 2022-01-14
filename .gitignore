@@ -2,3 +2,5 @@
 .ipynb_checkpoints*
 datasets/*
 !datasets/.gitkeep
+
+__pycache__*
