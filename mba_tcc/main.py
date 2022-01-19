@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 
 import plotly.express as px
@@ -18,10 +18,84 @@ class WindSpeedTower():
         
         self.data = translation.undisclosed(csv_path='datasets/wind.csv')
 
-    def check_missing(self):
+    def stats_missing(self, verbose:bool=False) -> pd.DataFrame:
         missing = self.data.loc[(self.data.isnull().speed == True)]
-        fmt = '''{} missing values found!\nRepresenting {}% of the dataset'''
-        print(fmt.format(missing.shape[0], round(missing.shape[0]/self.data.shape[0]*100,4)))
+        
+        missing_l = [r.Index for r in missing.itertuples()]
+        d = {}
+        aux = 0
+        for i,time in enumerate(missing_l):
+
+            if i == 0:
+                d.update({aux: {'values': [time]}})
+                continue
+
+            lapse = timedelta(minutes=10)
+            delta = time - missing_l[i-1]
+
+            if delta == lapse:
+                d[aux]['values'].append(time)
+            else:
+                d[aux]['begin'] = d[aux]['values'][0]
+                d[aux]['end'] = d[aux]['values'][-1]
+                d[aux]['delta'] = d[aux]['values'][-1] - d[aux]['values'][0]
+                d[aux]['missing'] = len(d[aux]['values'])
+
+                aux += 1
+                d.update({aux: {'values': [time]}})
+
+        missing_df = pd.DataFrame([{
+            'missing': d[b].get('missing'),
+            'begin': d[b].get('begin'),
+            'end': d[b].get('end'),
+            'delta': d[b].get('delta')
+        } for b in d][:-1])
+
+        length = self.data.shape[0]
+        n_missing = missing.shape[0]
+        percentage = round(missing.shape[0]/self.data.shape[0]*100,4)
+        longest = missing_df.sort_values(['missing'], ascending=False).iloc[0]
+        frequent = missing_df.groupby('missing')\
+                .count()\
+                .sort_values('begin', ascending=False)\
+                .reset_index()\
+                .iloc[0]
+
+        fmt = '''
+    =========================================================
+    Length of Time Series:
+    {length}
+    ---------------------------------------------------------
+    Number of Missing Values:
+    {missing}
+    ---------------------------------------------------------
+    Percentage of Missing Values:
+    {percentage} %
+    =========================================================
+    Stats for Gaps
+
+    Longest Gap (series of consecutive missing):
+    {missing_sequence} missing in a row for a total of {delta}
+    Between {begin} and {end}
+    ---------------------------------------------------------
+    Most frequent gap size (series of consecutive NA series):
+    {frequent_missing} missing in a row (occurring {frequent_count} times)
+    =========================================================
+        '''.format(
+            length=length,
+            missing=n_missing,
+            percentage=percentage,
+            missing_sequence=longest.missing,
+            delta=longest.delta,
+            begin=longest.begin,
+            end=longest.end,
+            frequent_missing = frequent.missing,
+            frequent_count = frequent.begin)
+        
+        if verbose:
+            print(fmt)
+        
+        return missing_df
 
     def get_range(self, begin: datetime, end: datetime) -> pd.DataFrame:
         '''Returns the dataset between the selected range'''
