@@ -1,16 +1,14 @@
 from datetime import datetime, timedelta
 import pandas as pd
-
 import plotly.express as px
 import plotly.graph_objs as go
+import statsmodels.api as sm
 
 from plotly.subplots import make_subplots
 
-from services import translation
+from services import (translation, theme)
 
-viridis_scale = px.colors.sequential.Viridis
-
-from services import (translation)
+color_cycle = theme.get_colors()
 
 class WindSpeedTower():
     
@@ -123,7 +121,7 @@ class WindSpeedTower():
                     x=df.index,
                     y=df.speed,
                     mode='lines',
-                    line=dict(color=viridis_scale[0]))
+                    line=dict(color=next(color_cycle)))
 
         box_fig = px.box(df, labels={"value": "Wind Speed (m/s)","time": "Time"})
         box = box_fig['data'][0]
@@ -146,44 +144,130 @@ class WindSpeedTower():
                     x=df.index,
                     y=df.speed,
                     mode='lines',
-                    line=dict(color=viridis_scale[0]))
+                    line=dict(color=next(color_cycle)))
         hourly = go.Scatter(
                     name='hour',
                     x=df.resample('h').mean().index,
                     y=df.resample('h').mean().speed,
                     mode='lines',
-                    line=dict(color=viridis_scale[2]))
+                    line=dict(color=next(color_cycle)))
         day = go.Scatter(
                     name='day',
                     x=df.resample('d').mean().index,
                     y=df.resample('d').mean().speed,
                     mode='lines',
-                    line=dict(color=viridis_scale[4]))
+                    line=dict(color=next(color_cycle)))
         month = go.Scatter(
                     name='month',
                     x=df.resample('m').mean().index,
                     y=df.resample('m').mean().speed,
                     mode='lines',
-                    line=dict(color=viridis_scale[6]))
+                    line=dict(color=next(color_cycle)))
         year = go.Scatter(
                     name='year',
                     x=df.resample('y').mean().index,
                     y=df.resample('y').mean().speed,
                     mode='lines',
-                    line=dict(color=viridis_scale[8]))
+                    line=dict(color=next(color_cycle)))
         box_fig = px.box(df,labels={"value": "Wind Speed (m/s)","time": "Time"})
         box = box_fig['data'][0]
 
 
-        fig = make_subplots(rows=5, cols=1, subplot_titles=("10 min", "Hourly", "Daily", "Monthly", "Yearly"), shared_yaxes=True)
-        fig.update_layout(height=1500)
+        fig = make_subplots(rows=5, cols=1,
+                            vertical_spacing=0.025,
+                            shared_yaxes=True)
+        fig.update_layout(height=1000,
+                          title_text="Wind Speed series and its averages over time")
+
         fig.add_trace(min10, row=1, col=1)
         fig.add_trace(hourly, row=2, col=1)
         fig.add_trace(day, row=3, col=1)
         fig.add_trace(month, row=4, col=1)
         fig.add_trace(year, row=5, col=1)
+
+        fig.update_yaxes(title_text="Time Series", row=1, col=1)
+        fig.update_yaxes(title_text="Hourly", row=2, col=1)
+        fig.update_yaxes(title_text="Daily", row=3, col=1)
+        fig.update_yaxes(title_text="Monthly", row=4, col=1)
+        fig.update_yaxes(title_text="Yearly", row=5, col=1)
         
         fig.show()
+
+    def decompose(self, period:str, model: str, plot:bool=True, overlay_trend:bool=False):
+        switch = {
+            'h': {'sample': 'h', 'period': 365*24, 'title': 'Hourly'},
+            'd': {'sample': 'd', 'period': 365, 'title': 'Daily'},
+            'w': {'sample': 'w', 'period': int(365/7), 'title': 'Weekly'},
+            'm': {'sample': 'm', 'period': 12, 'title': 'Monthly'}
+        }
+
+        params = switch.get(period)
+
+        series = self.data.copy().resample(params['sample']).mean().dropna(subset=['speed'])
+        decomposition = sm.tsa.seasonal_decompose(series, period=params['period'], model=model)
+        
+        self.trend = decomposition.trend
+        self.seasonal = decomposition.seasonal
+        self.residue = decomposition.resid
+        
+        if plot:
+            series = go.Scatter(
+                        name='series',
+                        x=series.index,
+                        y=series.speed,
+                        mode='lines',
+                        line=dict(color=next(color_cycle)))
+
+            trend = go.Scatter(
+                        name='trend',
+                        x=decomposition.trend.index,
+                        y=decomposition.trend,
+                        mode='lines',
+                        line=dict(color=next(color_cycle)))
+            seasonal = go.Scatter(
+                        name='seasonal',
+                        x=decomposition.seasonal.index,
+                        y=decomposition.seasonal,
+                        mode='lines',
+                        line=dict(color=next(color_cycle)))
+            resid = go.Scatter(
+                        name='resid',
+                        x=decomposition.resid.index,
+                        y=decomposition.resid,
+                        mode='lines',
+                        line=dict(color=next(color_cycle)))
+
+            fig = make_subplots(rows=5, cols=1,
+                                vertical_spacing=0.015,
+                                shared_yaxes=True,
+                                shared_xaxes=True)
+
+            fig.update_layout(height=1000,
+                            title_text="{} Series decomposition".format(params['title']),
+                            xaxis4_showticklabels=True,
+                            showlegend=False)
+
+            fig.add_trace(series, row=1, col=1)
+            fig.add_trace(trend, row=2, col=1)
+            fig.add_trace(seasonal, row=3, col=1)
+            fig.add_trace(resid, row=4, col=1)
+
+            fig.update_yaxes(title_text="Time Series", row=1, col=1)
+            fig.update_yaxes(title_text="Trend", row=2, col=1)
+            fig.update_yaxes(title_text="Seasonal", row=3, col=1)
+            fig.update_yaxes(title_text="Residue", row=4, col=1)
+
+            if overlay_trend:
+                trend = go.Scatter(
+                        name='trend',
+                        x=decomposition.trend.index,
+                        y=decomposition.trend,
+                        mode='lines',
+                        opacity=0.5,
+                        line=dict(color=next(color_cycle)))
+                fig.add_trace(trend, row=1, col=1)
+
+            fig.show()
 
     def reindex_series(self):
         '''Void function to reindex time series between begin and end'''

@@ -1,4 +1,4 @@
-from mba_tcc import __version__
+from notebooks import __version__
 
 
 def test_version():
