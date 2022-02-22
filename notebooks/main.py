@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objs as go
@@ -9,6 +10,34 @@ from plotly.subplots import make_subplots
 from services import (translation, theme)
 
 color_cycle = theme.get_colors()
+
+def _build_traces(corr_array):
+    lower_y = corr_array[1][:,0] - corr_array[0]
+    upper_y = corr_array[1][:,1] - corr_array[0]
+    
+    traces = []
+    for x in range(len(corr_array[0])):
+        
+        traces.append(go.Scatter(x=(x,x),
+                                 y=(0,corr_array[0][x]),
+                                 mode='lines',
+                                 line_color='#3f3f3f'))
+    traces.append(go.Scatter(x=np.arange(len(corr_array[0])),
+                             y=corr_array[0],
+                             mode='markers',
+                             marker_color='#1f77b4',
+                             marker_size=10))
+    traces.append(go.Scatter(x=np.arange(len(corr_array[0])),
+                             y=upper_y,
+                             mode='lines',
+                             line_color='rgba(255,255,255,0)'))
+    traces.append(go.Scatter(x=np.arange(len(corr_array[0])),
+                             y=lower_y, 
+                             mode='lines',
+                             fillcolor='rgba(32, 146, 230,0.3)',
+                             fill='tonexty',
+                             line_color='rgba(255,255,255,0)'))
+    return traces
 
 class WindSpeedTower():
     
@@ -268,6 +297,82 @@ class WindSpeedTower():
                 fig.add_trace(trend, row=1, col=1)
 
             fig.show()
+
+    def stationarity(self, period:str, verbose:bool=False, plot:bool=True):
+
+        switch = {
+            'h': {'sample': 'h','title': 'Hourly'},
+            'd': {'sample': 'd','title': 'Daily'},
+            'w': {'sample': 'w','title': 'Weekly'},
+            'm': {'sample': 'm','title': 'Monthly'}
+        }
+
+        params = switch.get(period)
+
+        series = self.data.copy().resample(params['sample']).mean().dropna(subset=['speed'])
+        test = sm.tsa.stattools.adfuller(series, autolag='AIC')
+
+        self.adf = test[0]
+        self.p_value=test[1]
+        self.rejected_ho = True if self.adf < test[4]['5%'] else False
+        stationarity = 'Time Series is STATIONARY' if self.rejected_ho else 'Time Series is NON-STATIONARY' 
+
+
+        if verbose:
+            print('=========================================================')
+            print('{:^57s}'.format('Augmented Dickey-Fuller Test'))
+            print('{:^57s}'.format(params['title'].upper()))
+            print('---------------------------------------------------------')
+            print('ADF Statistic:')
+            print('{adf}'.format(adf=self.adf))
+            print('---------------------------------------------------------')
+            print('p-value:')
+            print('{p_value}'.format(p_value=self.p_value))
+            print('=========================================================')
+            print('Critical Values:')
+            for k, v in test[4].items():
+                print('\t{}: {}'.format(k,v))
+            print('---------------------------------------------------------')
+            print('Rejected Null Hypothesis? - {rejected_ho}'.format(rejected_ho = self.rejected_ho))
+            print(stationarity)
+            print('=========================================================')
+
+        if plot:
+            color_cycle = theme.get_colors()
+
+            acf_array = sm.tsa.stattools.acf(series.dropna(), alpha=0.05)
+            pacf_array = sm.tsa.stattools.pacf(series.dropna(), alpha=0.05)
+
+            series_trace = go.Scatter(name='series',
+                                      x=series.index,
+                                      y=series.speed,
+                                      mode='lines',
+                                      line=dict(color=next(color_cycle)))
+
+            acf_traces = _build_traces(corr_array=acf_array)
+            pacf_traces = _build_traces(corr_array=pacf_array)
+
+
+            fig = make_subplots(rows=2, cols=2,
+                                vertical_spacing=0.075,
+                                specs=[[{"colspan": 2}, None],
+                                       [{},{}]],
+                                subplot_titles=("{} Series<br>Dickey-Fuller p-value: {}".format(params['title'], round(self.p_value,4)),
+                                                "Autocorrelation",
+                                                "Partial Autocorrelation"))
+
+            fig.update_layout(height=1000,
+                            title_text="Stationarity Analysis",
+                            xaxis_showticklabels=True,
+                            showlegend=False)
+
+            fig.update_yaxes(zerolinecolor='#000000')
+
+            fig.add_trace(series_trace, row=1, col=1)
+            for t in acf_traces: fig.add_trace(t, row=2, col=1)
+            for t in pacf_traces: fig.add_trace(t, row=2, col=2)
+            fig.show()
+
 
     def reindex_series(self):
         '''Void function to reindex time series between begin and end'''
