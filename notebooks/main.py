@@ -122,7 +122,7 @@ class WindSpeedTower():
         if verbose:
             print(fmt)
         
-        return missing_df
+        return missing_df.sort_values(by=['missing'], ascending=[False])
 
     def get_range(self, begin: datetime, end: datetime) -> pd.DataFrame:
         '''Returns the dataset between the selected range'''
@@ -163,9 +163,15 @@ class WindSpeedTower():
         fig.show()
 
         
-    def plot_series(self):
+    def plot_series(self, export:bool=False):
         '''Plot linegraphs to the Time Series in different time scales
         '''
+
+        if export:
+            title_text = None
+        else:
+            title_text = "Wind Speed series and its averages over different time periods"
+
         df = self.data.copy()
         
         min10 = go.Scatter(
@@ -186,6 +192,12 @@ class WindSpeedTower():
                     y=df.resample('d').mean().speed,
                     mode='lines',
                     line=dict(color=next(color_cycle)))
+        week = go.Scatter(
+                    name='week',
+                    x=df.resample('w').mean().index,
+                    y=df.resample('w').mean().speed,
+                    mode='lines',
+                    line=dict(color=next(color_cycle)))
         month = go.Scatter(
                     name='month',
                     x=df.resample('m').mean().index,
@@ -202,33 +214,41 @@ class WindSpeedTower():
         box = box_fig['data'][0]
 
 
-        fig = make_subplots(rows=5, cols=1,
+        fig = make_subplots(rows=6, cols=1,
                             vertical_spacing=0.025,
-                            shared_yaxes=True)
+                            shared_yaxes=True,
+                            shared_xaxes=True)
         fig.update_layout(height=1000,
-                          title_text="Wind Speed series and its averages over time")
+                          title_text=title_text)
 
         fig.add_trace(min10, row=1, col=1)
         fig.add_trace(hourly, row=2, col=1)
         fig.add_trace(day, row=3, col=1)
-        fig.add_trace(month, row=4, col=1)
-        fig.add_trace(year, row=5, col=1)
+        fig.add_trace(week, row=4, col=1)
+        fig.add_trace(month, row=5, col=1)
+        fig.add_trace(year, row=6, col=1)
 
         fig.update_yaxes(title_text="Time Series", row=1, col=1)
         fig.update_yaxes(title_text="Hourly", row=2, col=1)
         fig.update_yaxes(title_text="Daily", row=3, col=1)
-        fig.update_yaxes(title_text="Monthly", row=4, col=1)
-        fig.update_yaxes(title_text="Yearly", row=5, col=1)
+        fig.update_yaxes(title_text="Weekly", row=4, col=1)
+        fig.update_yaxes(title_text="Monthly", row=5, col=1)
+        fig.update_yaxes(title_text="Yearly", row=6, col=1)
         
         fig.show()
 
-    def decompose(self, period:str, model: str, plot:bool=True, overlay_trend:bool=False):
+    def decompose(self, period:str, model: str, plot:bool=True, overlay_trend:bool=False, export:bool=False):
         switch = {
             'h': {'sample': 'h', 'period': 365*24, 'title': 'Hourly'},
             'd': {'sample': 'd', 'period': 365, 'title': 'Daily'},
             'w': {'sample': 'w', 'period': int(365/7), 'title': 'Weekly'},
             'm': {'sample': 'm', 'period': 12, 'title': 'Monthly'}
         }
+
+        if export:
+            title_text = None
+        else:
+            title_text = "{} Series decomposition".format(params['title'])
 
         params = switch.get(period)
 
@@ -272,7 +292,7 @@ class WindSpeedTower():
                                 shared_xaxes=True)
 
             fig.update_layout(height=1000,
-                            title_text="{} Series decomposition".format(params['title']),
+                            title_text=title_text,
                             xaxis4_showticklabels=True,
                             showlegend=False)
 
@@ -298,7 +318,7 @@ class WindSpeedTower():
 
             fig.show()
 
-    def stationarity(self, period:str, verbose:bool=False, plot:bool=True):
+    def stationarity(self, period:str, verbose:bool=False, plot:bool=True, export:bool=False):
 
         switch = {
             'h': {'sample': 'h','title': 'Hourly'},
@@ -306,6 +326,11 @@ class WindSpeedTower():
             'w': {'sample': 'w','title': 'Weekly'},
             'm': {'sample': 'm','title': 'Monthly'}
         }
+
+        if export:
+            title_text = None
+        else:
+            title_text = "Stationarity Analysis"
 
         params = switch.get(period)
 
@@ -362,7 +387,7 @@ class WindSpeedTower():
                                                 "Partial Autocorrelation"))
 
             fig.update_layout(height=1000,
-                            title_text="Stationarity Analysis",
+                            title_text=title_text,
                             xaxis_showticklabels=True,
                             showlegend=False)
 
