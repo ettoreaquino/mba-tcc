@@ -1,15 +1,23 @@
 from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
+import pickle
 import plotly.express as px
 import plotly.graph_objs as go
 import statsmodels.api as sm
 
 from plotly.subplots import make_subplots
 
-from services import (translation, theme)
+from services import (translation, theme, timeseries)
 
 color_cycle = theme.get_colors()
+
+def load_tower(pickefile: str):
+
+    with open(pickefile, 'rb') as file:
+        Tower = pickle.load(file)
+
+    return Tower
 
 def _build_traces(corr_array):
     lower_y = corr_array[1][:,0] - corr_array[0]
@@ -41,9 +49,62 @@ def _build_traces(corr_array):
 
 class WindSpeedTower():
     
-    def __init__(self, csv_path: str):
+    def __init__(self, name: str, csv_path: str):
         
-        self.data = translation.undisclosed(csv_path='datasets/wind.csv')
+        self.name = name
+        self.data = translation.undisclosed(csv_path=csv_path)
+
+
+    def build_sets(self, period:str, split: str, plot: bool=False):
+        '''
+        Returns a dataset, a trainingset and a testset based on a period
+        and a split refererence. 
+        '''
+        splittime = datetime.strptime(split, '%Y-%m-%dT%H:%M:%S')
+        switch = {
+            'h':  {'sample': 'h',  'period': 365*24,     'title': 'Hourly'},
+            'd':  {'sample': 'd',  'period': 365,        'title': 'Daily'},
+            'w':  {'sample': 'w',  'period': int(365/7), 'title': 'Weekly'},
+            'm':  {'sample': 'm',  'period': 12,         'title': 'Monthly'},
+            'q':  {'sample': 'q',  'period': 4,          'title': 'Quarter'},
+            '2q': {'sample': '2q', 'period': 2,          'title': 'Semester'},
+        }
+
+        params = switch.get(period)
+        self.dataset = self.data.copy().resample(params['sample']).mean().dropna(subset=['speed'])
+        self.trainset = self.loc[(self.index < splittime)]
+        self.testset  = self.loc[(self.index >= splittime)]
+
+        if plot:
+            train = go.Scatter(
+                        name='train',
+                        x=self.trainset.index,
+                        y=self.trainset.speed,
+                        mode='lines',
+                        line=dict(color=next(color_cycle)))
+
+            test = go.Scatter(
+                        name='test',
+                        x=self.testset.index,
+                        y=self.testset.speed,
+                        mode='lines',
+                        line=dict(color=next(color_cycle)))
+
+
+            fig = go.Figure()
+            fig.add_trace(train)
+            fig.add_trace(test)
+
+            fig.show()
+
+            fig.update_layout(height=1000,
+                              title_text='Train and Test splits',
+                              xaxis_showticklabels=True,
+                              showlegend=False)
+
+            fig.show()
+
+        return {'dataset': dataset, 'train': trainset,'test': testset}
 
     def stats_missing(self, verbose:bool=False) -> pd.DataFrame:
         missing = self.data.loc[(self.data.isnull().speed == True)]
@@ -173,6 +234,14 @@ class WindSpeedTower():
             title_text = "Wind Speed series and its averages over different time periods"
 
         df = self.data.copy()
+
+        hourly = timeseries.resample(dataset=df, rule='h')
+        daily = timeseries.resample(dataset=df, rule='d')
+        weekly = timeseries.resample(dataset=df, rule='w')
+        monthly = timeseries.resample(dataset=df, rule='m')
+        quarterly = timeseries.resample(dataset=df, rule='q')
+        half_annualy = timeseries.resample(dataset=df, rule='2q')
+        yearly = timeseries.resample(dataset=df, rule='y')
         
         min10 = go.Scatter(
                     name='10 min',
@@ -182,32 +251,32 @@ class WindSpeedTower():
                     line=dict(color=next(color_cycle)))
         hourly = go.Scatter(
                     name='hour',
-                    x=df.resample('h').mean().index,
-                    y=df.resample('h').mean().speed,
+                    x=hourly.index,
+                    y=hourly['mean'],
                     mode='lines',
                     line=dict(color=next(color_cycle)))
         day = go.Scatter(
                     name='day',
-                    x=df.resample('d').mean().index,
-                    y=df.resample('d').mean().speed,
+                    x=daily.index,
+                    y=daily['mean'],
                     mode='lines',
                     line=dict(color=next(color_cycle)))
         week = go.Scatter(
                     name='week',
-                    x=df.resample('w').mean().index,
-                    y=df.resample('w').mean().speed,
+                    x=weekly.index,
+                    y=weekly['mean'],
                     mode='lines',
                     line=dict(color=next(color_cycle)))
         month = go.Scatter(
                     name='month',
-                    x=df.resample('m').mean().index,
-                    y=df.resample('m').mean().speed,
+                    x=monthly.index,
+                    y=monthly['mean'],
                     mode='lines',
                     line=dict(color=next(color_cycle)))
         year = go.Scatter(
                     name='year',
-                    x=df.resample('y').mean().index,
-                    y=df.resample('y').mean().speed,
+                    x=yearly.index,
+                    y=yearly['mean'],
                     mode='lines',
                     line=dict(color=next(color_cycle)))
         box_fig = px.box(df,labels={"value": "Wind Speed (m/s)","time": "Time"})
@@ -409,3 +478,11 @@ class WindSpeedTower():
         
         self.data = df
         print('Tower data reindexed between {} and {}'.format(min_time, max_time))
+
+    def save(self):
+
+        with open(self.name, 'wb') as file:
+            pickle.dump(self, file)
+
+        print('File {}, saved.'.format(self.name))
+
