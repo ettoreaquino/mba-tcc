@@ -1,0 +1,60 @@
+missing:
+  columns: ["faltantes", "inicio", "fim", "delta"]
+  report: "\n
+    =========================================================\n
+    Comprimento da série:\n
+    {length}\n
+    ---------------------------------------------------------\n
+    Número de valores faltantes:\n
+    {missing}\n
+    ---------------------------------------------------------\n
+    Percentual de valores faltantes:\n
+    {percentage} %\n
+    =========================================================\n
+    Estatísticas:\n
+    \n
+    Maior gap (faltantes em sequência):\n
+    {missing_sequence} faltantes em sequência, somando: {delta}\n
+    Entre {begin} e {end}\n
+    ---------------------------------------------------------\n
+    Tamanho do gap mais frequente (serie de NAs consecutivos):\n
+    {frequent_missing} faltantes em sequência (ocorrendo {frequent_count} vezes)\n
+    =========================================================\n"
+series:
+  title: Série temporal de velocidade de vento e médias por período
+  sampling:
+    - name: "hora"
+      rule: "h"
+      period: "365*24"
+      title: "Horário"
+      idx_fmt: "%Y-%m-%dT%H:%M:%S"
+    - name: "dia"
+      rule: "d"
+      period: "365"
+      title: "Diário"
+      idx_fmt: "%Y-%m-%d"
+    - name: "semana"
+      rule: "w"
+      period: "int(365/7)"
+      title: "Semanal"
+      idx_fmt: "%Y-%m-%d"
+    - name: "mes"
+      rule: "m"
+      period: "12"
+      title: "Mensal"
+      idx_fmt: "%Y-%m-%d"
+    - name: "trimestre"
+      rule: "q"
+      period: "4"
+      title: "Trimestral"
+      idx_fmt: "%Y-%m-%d"
+    - name: "semestre"
+      rule: "2q"
+      period: "2"
+      title: "Semestral"
+      idx_fmt: "%Y-%m-%d"
+    - name: "ano"
+      rule: "y"
+      period: "1"
+      title: "Anual"
+      idx_fmt: "%Y-%m-%d"

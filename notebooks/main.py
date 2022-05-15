@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta
+from re import I
 import numpy as np
 import pandas as pd
 import pickle
 import plotly.express as px
 import plotly.graph_objs as go
 import statsmodels.api as sm
+import yaml
 
 from plotly.subplots import make_subplots
 
@@ -18,6 +20,12 @@ def load_tower(pickefile: str):
         Tower = pickle.load(file)
 
     return Tower
+
+def _load_interface(interface: str):
+    with open("services/portuguese.yml") as file:
+        interface = yaml.load(file, Loader=yaml.SafeLoader)
+
+    return interface
 
 def _build_traces(corr_array):
     lower_y = corr_array[1][:,0] - corr_array[0]
@@ -49,141 +57,20 @@ def _build_traces(corr_array):
 
 class WindSpeedTower():
     
-    def __init__(self, name: str, csv_path: str):
+    def __init__(self, name: str, csv_path: str, interface: str='english'):
         
         self.name = name
         self.data = translation.undisclosed(csv_path=csv_path)
+        self.__interface = _load_interface(interface=interface)
 
-
-    def build_sets(self, period:str, split: str, plot: bool=False):
-        '''
-        Returns a dataset, a trainingset and a testset based on a period
-        and a split refererence. 
-        '''
-        splittime = datetime.strptime(split, '%Y-%m-%dT%H:%M:%S')
-        switch = {
-            'h':  {'sample': 'h',  'period': 365*24,     'title': 'Hourly'},
-            'd':  {'sample': 'd',  'period': 365,        'title': 'Daily'},
-            'w':  {'sample': 'w',  'period': int(365/7), 'title': 'Weekly'},
-            'm':  {'sample': 'm',  'period': 12,         'title': 'Monthly'},
-            'q':  {'sample': 'q',  'period': 4,          'title': 'Quarter'},
-            '2q': {'sample': '2q', 'period': 2,          'title': 'Semester'},
-        }
-
-        params = switch.get(period)
-        self.dataset = self.data.copy().resample(params['sample']).mean().dropna(subset=['speed'])
-        self.trainset = self.loc[(self.index < splittime)]
-        self.testset  = self.loc[(self.index >= splittime)]
-
-        if plot:
-            train = go.Scatter(
-                        name='train',
-                        x=self.trainset.index,
-                        y=self.trainset.speed,
-                        mode='lines',
-                        line=dict(color=next(color_cycle)))
-
-            test = go.Scatter(
-                        name='test',
-                        x=self.testset.index,
-                        y=self.testset.speed,
-                        mode='lines',
-                        line=dict(color=next(color_cycle)))
-
-
-            fig = go.Figure()
-            fig.add_trace(train)
-            fig.add_trace(test)
-
-            fig.show()
-
-            fig.update_layout(height=1000,
-                              title_text='Train and Test splits',
-                              xaxis_showticklabels=True,
-                              showlegend=False)
-
-            fig.show()
-
-        return {'dataset': dataset, 'train': trainset,'test': testset}
-
-    def stats_missing(self, verbose:bool=False) -> pd.DataFrame:
+    def missing_stats(self, verbose:bool=False) -> pd.DataFrame:
         missing = self.data.loc[(self.data.isnull().speed == True)]
         
-        missing_l = [r.Index for r in missing.itertuples()]
-        d = {}
-        aux = 0
-        for i,time in enumerate(missing_l):
-
-            if i == 0:
-                d.update({aux: {'values': [time]}})
-                continue
-
-            lapse = timedelta(minutes=10)
-            delta = time - missing_l[i-1]
-
-            if delta == lapse:
-                d[aux]['values'].append(time)
-            else:
-                d[aux]['begin'] = d[aux]['values'][0]
-                d[aux]['end'] = d[aux]['values'][-1]
-                d[aux]['delta'] = d[aux]['values'][-1] - d[aux]['values'][0]
-                d[aux]['missing'] = len(d[aux]['values'])
-
-                aux += 1
-                d.update({aux: {'values': [time]}})
-
-        missing_df = pd.DataFrame([{
-            'missing': d[b].get('missing'),
-            'begin': d[b].get('begin'),
-            'end': d[b].get('end'),
-            'delta': d[b].get('delta')
-        } for b in d][:-1])
-
-        length = self.data.shape[0]
-        n_missing = missing.shape[0]
-        percentage = round(missing.shape[0]/self.data.shape[0]*100,4)
-        longest = missing_df.sort_values(['missing'], ascending=False).iloc[0]
-        frequent = missing_df.groupby('missing')\
-                .count()\
-                .sort_values('begin', ascending=False)\
-                .reset_index()\
-                .iloc[0]
-
-        fmt = '''
-    =========================================================
-    Length of Time Series:
-    {length}
-    ---------------------------------------------------------
-    Number of Missing Values:
-    {missing}
-    ---------------------------------------------------------
-    Percentage of Missing Values:
-    {percentage} %
-    =========================================================
-    Stats for Gaps
-
-    Longest Gap (series of consecutive missing):
-    {missing_sequence} missing in a row for a total of {delta}
-    Between {begin} and {end}
-    ---------------------------------------------------------
-    Most frequent gap size (series of consecutive NA series):
-    {frequent_missing} missing in a row (occurring {frequent_count} times)
-    =========================================================
-        '''.format(
-            length=length,
-            missing=n_missing,
-            percentage=percentage,
-            missing_sequence=longest.missing,
-            delta=longest.delta,
-            begin=longest.begin,
-            end=longest.end,
-            frequent_missing = frequent.missing,
-            frequent_count = frequent.begin)
+        return timeseries.missing_stats(original_df=self.data,
+                                        missing_df=missing,
+                                        interface=self.__interface['missing'],
+                                        verbose=verbose)
         
-        if verbose:
-            print(fmt)
-        
-        return missing_df.sort_values(by=['missing'], ascending=[False])
 
     def get_range(self, begin: datetime, end: datetime) -> pd.DataFrame:
         '''Returns the dataset between the selected range'''
@@ -231,7 +118,10 @@ class WindSpeedTower():
         if export:
             title_text = None
         else:
-            title_text = "Wind Speed series and its averages over different time periods"
+            if self.__portuguese:
+                title_text = "Série temporal de velocidade de vento e médias por período"
+            else:
+                title_text = "Wind Speed series and its averages over different time periods"
 
         df = self.data.copy()
 
@@ -250,31 +140,43 @@ class WindSpeedTower():
                     mode='lines',
                     line=dict(color=next(color_cycle)))
         hourly = go.Scatter(
-                    name='hour',
+                    name='hour' if not self.__portuguese else 'hora',
                     x=hourly.index,
                     y=hourly['mean'],
                     mode='lines',
                     line=dict(color=next(color_cycle)))
         day = go.Scatter(
-                    name='day',
+                    name='day' if not self.__portuguese else 'dia',
                     x=daily.index,
                     y=daily['mean'],
                     mode='lines',
                     line=dict(color=next(color_cycle)))
         week = go.Scatter(
-                    name='week',
+                    name='week' if not self.__portuguese else 'semana',
                     x=weekly.index,
                     y=weekly['mean'],
                     mode='lines',
                     line=dict(color=next(color_cycle)))
         month = go.Scatter(
-                    name='month',
+                    name='month' if not self.__portuguese else 'mes',
                     x=monthly.index,
                     y=monthly['mean'],
                     mode='lines',
                     line=dict(color=next(color_cycle)))
+        quarter = go.Scatter(
+                    name='quarter' if not self.__portuguese else 'trimestre',
+                    x=quarterly.index,
+                    y=quarterly['mean'],
+                    mode='lines',
+                    line=dict(color=next(color_cycle)))
+        half_annual = go.Scatter(
+                    name='half-annual' if not self.__portuguese else 'semestre',
+                    x=half_annualy.index,
+                    y=half_annualy['mean'],
+                    mode='lines',
+                    line=dict(color=next(color_cycle)))
         year = go.Scatter(
-                    name='year',
+                    name='year' if not self.__portuguese else 'ano',
                     x=yearly.index,
                     y=yearly['mean'],
                     mode='lines',
@@ -283,7 +185,7 @@ class WindSpeedTower():
         box = box_fig['data'][0]
 
 
-        fig = make_subplots(rows=6, cols=1,
+        fig = make_subplots(rows=8, cols=1,
                             vertical_spacing=0.025,
                             shared_yaxes=True,
                             shared_xaxes=True)
@@ -295,14 +197,18 @@ class WindSpeedTower():
         fig.add_trace(day, row=3, col=1)
         fig.add_trace(week, row=4, col=1)
         fig.add_trace(month, row=5, col=1)
-        fig.add_trace(year, row=6, col=1)
+        fig.add_trace(quarter, row=6, col=1)
+        fig.add_trace(half_annual, row=7, col=1)
+        fig.add_trace(year, row=8, col=1)
 
         fig.update_yaxes(title_text="Time Series", row=1, col=1)
         fig.update_yaxes(title_text="Hourly", row=2, col=1)
         fig.update_yaxes(title_text="Daily", row=3, col=1)
         fig.update_yaxes(title_text="Weekly", row=4, col=1)
         fig.update_yaxes(title_text="Monthly", row=5, col=1)
-        fig.update_yaxes(title_text="Yearly", row=6, col=1)
+        fig.update_yaxes(title_text="Quarterly", row=6, col=1)
+        fig.update_yaxes(title_text="Half-Annualy", row=7, col=1)
+        fig.update_yaxes(title_text="Yearly", row=8, col=1)
         
         fig.show()
 
