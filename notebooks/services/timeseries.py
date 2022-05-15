@@ -1,9 +1,6 @@
 from datetime import timedelta
 
 import pandas as pd
-def get_resample_info(rule: str, interface: str) -> dict:
-
-    return sample_switch.get(rule)
 
 def resample(dataset: pd.DataFrame, rule: str):
     '''
@@ -17,9 +14,7 @@ def resample(dataset: pd.DataFrame, rule: str):
      
     The resampled dataset indicates all of the statistics regarding the resampled time window.
     '''
-
-    sample_info = get_resample_info(rule)
-    resampler = dataset.resample(rule_info['rule'], closed='left')
+    resampler = dataset.resample(rule, closed='left')
 
     df = resampler.mean()
     df.rename(columns={df.columns[0]:'mean'}, inplace=True)

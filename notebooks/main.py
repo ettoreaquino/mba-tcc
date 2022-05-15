@@ -38,6 +38,7 @@ def _build_traces(corr_array):
                                  y=(0,corr_array[0][x]),
                                  mode='lines',
                                  line_color='#3f3f3f'))
+
     traces.append(go.Scatter(x=np.arange(len(corr_array[0])),
                              y=corr_array[0],
                              mode='markers',
@@ -114,76 +115,13 @@ class WindSpeedTower():
     def plot_series(self, export:bool=False):
         '''Plot linegraphs to the Time Series in different time scales
         '''
+        df = self.data.copy()
+        interface = self.__interface['series']
 
         if export:
             title_text = None
         else:
-            if self.__portuguese:
-                title_text = "Série temporal de velocidade de vento e médias por período"
-            else:
-                title_text = "Wind Speed series and its averages over different time periods"
-
-        df = self.data.copy()
-
-        hourly = timeseries.resample(dataset=df, rule='h')
-        daily = timeseries.resample(dataset=df, rule='d')
-        weekly = timeseries.resample(dataset=df, rule='w')
-        monthly = timeseries.resample(dataset=df, rule='m')
-        quarterly = timeseries.resample(dataset=df, rule='q')
-        half_annualy = timeseries.resample(dataset=df, rule='2q')
-        yearly = timeseries.resample(dataset=df, rule='y')
-        
-        min10 = go.Scatter(
-                    name='10 min',
-                    x=df.index,
-                    y=df.speed,
-                    mode='lines',
-                    line=dict(color=next(color_cycle)))
-        hourly = go.Scatter(
-                    name='hour' if not self.__portuguese else 'hora',
-                    x=hourly.index,
-                    y=hourly['mean'],
-                    mode='lines',
-                    line=dict(color=next(color_cycle)))
-        day = go.Scatter(
-                    name='day' if not self.__portuguese else 'dia',
-                    x=daily.index,
-                    y=daily['mean'],
-                    mode='lines',
-                    line=dict(color=next(color_cycle)))
-        week = go.Scatter(
-                    name='week' if not self.__portuguese else 'semana',
-                    x=weekly.index,
-                    y=weekly['mean'],
-                    mode='lines',
-                    line=dict(color=next(color_cycle)))
-        month = go.Scatter(
-                    name='month' if not self.__portuguese else 'mes',
-                    x=monthly.index,
-                    y=monthly['mean'],
-                    mode='lines',
-                    line=dict(color=next(color_cycle)))
-        quarter = go.Scatter(
-                    name='quarter' if not self.__portuguese else 'trimestre',
-                    x=quarterly.index,
-                    y=quarterly['mean'],
-                    mode='lines',
-                    line=dict(color=next(color_cycle)))
-        half_annual = go.Scatter(
-                    name='half-annual' if not self.__portuguese else 'semestre',
-                    x=half_annualy.index,
-                    y=half_annualy['mean'],
-                    mode='lines',
-                    line=dict(color=next(color_cycle)))
-        year = go.Scatter(
-                    name='year' if not self.__portuguese else 'ano',
-                    x=yearly.index,
-                    y=yearly['mean'],
-                    mode='lines',
-                    line=dict(color=next(color_cycle)))
-        box_fig = px.box(df,labels={"value": "Wind Speed (m/s)","time": "Time"})
-        box = box_fig['data'][0]
-
+            title_text = self.__interface['series']['title']
 
         fig = make_subplots(rows=8, cols=1,
                             vertical_spacing=0.025,
@@ -192,27 +130,31 @@ class WindSpeedTower():
         fig.update_layout(height=1000,
                           title_text=title_text)
 
+        min10 = go.Scatter(
+                    name='10 min',
+                    x=df.index,
+                    y=df.speed,
+                    mode='lines',
+                    line=dict(color=next(color_cycle)))
         fig.add_trace(min10, row=1, col=1)
-        fig.add_trace(hourly, row=2, col=1)
-        fig.add_trace(day, row=3, col=1)
-        fig.add_trace(week, row=4, col=1)
-        fig.add_trace(month, row=5, col=1)
-        fig.add_trace(quarter, row=6, col=1)
-        fig.add_trace(half_annual, row=7, col=1)
-        fig.add_trace(year, row=8, col=1)
+        fig.update_yaxes(title_text="10 min", row=1, col=1)
 
-        fig.update_yaxes(title_text="Time Series", row=1, col=1)
-        fig.update_yaxes(title_text="Hourly", row=2, col=1)
-        fig.update_yaxes(title_text="Daily", row=3, col=1)
-        fig.update_yaxes(title_text="Weekly", row=4, col=1)
-        fig.update_yaxes(title_text="Monthly", row=5, col=1)
-        fig.update_yaxes(title_text="Quarterly", row=6, col=1)
-        fig.update_yaxes(title_text="Half-Annualy", row=7, col=1)
-        fig.update_yaxes(title_text="Yearly", row=8, col=1)
+        for i, sample in enumerate(self.__interface['sampling']):
+            
+            series = timeseries.resample(dataset=df, rule=sample['rule'])
+            trace = go.Scatter(name=sample['name'],
+                               x=series.index,
+                               y=series['mean'],
+                               mode='lines',
+                               line=dict(color=next(color_cycle)))
+            fig.add_trace(trace, row=i+2, col=1)
+            fig.update_yaxes(title_text=sample['title'], row=i+2, col=1)
         
         fig.show()
 
     def decompose(self, period:str, model: str, plot:bool=True, overlay_trend:bool=False, export:bool=False):
+        df = self.data.copy()
+        
         switch = {
             'h': {'sample': 'h', 'period': 365*24, 'title': 'Hourly'},
             'd': {'sample': 'd', 'period': 365, 'title': 'Daily'},
@@ -227,7 +169,7 @@ class WindSpeedTower():
 
         params = switch.get(period)
 
-        series = self.data.copy().resample(params['sample']).mean().dropna(subset=['speed'])
+        series = df.resample(params['sample']).mean().dropna(subset=['speed'])
         decomposition = sm.tsa.seasonal_decompose(series, period=params['period'], model=model)
         
         self.trend = decomposition.trend
@@ -387,8 +329,8 @@ class WindSpeedTower():
 
     def save(self):
 
-        with open(self.name, 'wb') as file:
+        with open('{}.pkl'.format(self.name), 'wb') as file:
             pickle.dump(self, file)
 
-        print('File {}, saved.'.format(self.name))
+        print('File {}.pkl, saved.'.format(self.name))
 

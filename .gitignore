@@ -4,3 +4,5 @@ datasets/*
 !datasets/.gitkeep
 
 __pycache__*
+
+*.pkl
