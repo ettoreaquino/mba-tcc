@@ -1,0 +1,73 @@
+missing:
+  columns: ["faltantes", "inicio", "fim", "delta"]
+  report: "\n
+    =========================================================\n
+    Length of Time Series:\n
+    {length}\n
+    ---------------------------------------------------------\n
+    Number of Missing Values:\n
+    {missing}\n
+    ---------------------------------------------------------\n
+    Percentage of Missing Values:\n
+    {percentage} %\n
+    =========================================================\n
+    Stats for Gaps\n
+    Longest Gap (series of consecutive missing):\n
+    {missing_sequence} missing in a row for a total of {delta}\n
+    Between {begin} and {end}\n
+    ---------------------------------------------------------\n
+    Most frequent gap size (series of consecutive NA series):\n
+    {frequent_missing} missing in a row (occurring {frequent_count} times)\n
+    ========================================================="
+sampling:
+  - name: "hour"
+    rule: "h"
+    period: "365*24"
+    title: "Hourly"
+    idx_fmt: "%Y-%m-%dT%H:%M:%S"
+  - name: "day"
+    rule: "d"
+    period: "365"
+    title: "Daily"
+    idx_fmt: "%Y-%m-%d"
+  - name: "week"
+    rule: "w"
+    period: "int(365/7)"
+    title: "Weekly"
+    idx_fmt: "%Y-%m-%d"
+  - name: "month"
+    rule: "m"
+    period: "12"
+    title: "Monthly"
+    idx_fmt: "%Y-%m-%d"
+  - name: "quarter"
+    rule: "q"
+    period: "4"
+    title: "Quarterly"
+    idx_fmt: "%Y-%m-%d"
+  - name: "half-annualy"
+    rule: "2q"
+    period: "2"
+    title: "Half Annualy"
+    idx_fmt: "%Y-%m-%d"
+  - name: "year"
+    rule: "y"
+    period: "1"
+    title: "Yearly"
+    idx_fmt: "%Y-%m-%d"
+series:
+  title: Wind Speed time series and its averages over time
+  labels:
+    value: Wind Speed (m/s)
+    time: Time
+decomposition:
+  title: "{} decomposed Time Series"
+  yaxis:
+    title: "Time series"
+    trend: Trend
+    season: Seasonality
+    residue: Residue
+train:
+  title: Train and Test datasets
+  train: train
+  test: test

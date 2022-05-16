@@ -21,8 +21,11 @@ def load_tower(pickefile: str):
 
     return Tower
 
-def _load_interface(interface: str):
-    with open("services/portuguese.yml") as file:
+def _load_interface(language: str):
+    if language not in ['english', 'portuguese']:
+        raise ValueError('Invalid language {}'.format(language))
+
+    with open("services/{}.yml".format(language)) as file:
         interface = yaml.load(file, Loader=yaml.SafeLoader)
 
     return interface
@@ -58,11 +61,11 @@ def _build_traces(corr_array):
 
 class WindSpeedTower():
     
-    def __init__(self, name: str, csv_path: str, interface: str='english'):
+    def __init__(self, name: str, csv_path: str, language: str='english'):
         
         self.name = name
         self.data = translation.undisclosed(csv_path=csv_path)
-        self.__interface = _load_interface(interface=interface)
+        self.__interface = _load_interface(language=language)
 
     def missing_stats(self, verbose:bool=False) -> pd.DataFrame:
         missing = self.data.loc[(self.data.isnull().speed == True)]
@@ -116,7 +119,6 @@ class WindSpeedTower():
         '''Plot linegraphs to the Time Series in different time scales
         '''
         df = self.data.copy()
-        interface = self.__interface['series']
 
         if export:
             title_text = None
@@ -154,23 +156,15 @@ class WindSpeedTower():
 
     def decompose(self, period:str, model: str, plot:bool=True, overlay_trend:bool=False, export:bool=False):
         df = self.data.copy()
-        
-        switch = {
-            'h': {'sample': 'h', 'period': 365*24, 'title': 'Hourly'},
-            'd': {'sample': 'd', 'period': 365, 'title': 'Daily'},
-            'w': {'sample': 'w', 'period': int(365/7), 'title': 'Weekly'},
-            'm': {'sample': 'm', 'period': 12, 'title': 'Monthly'}
-        }
+        sample = list(filter(lambda x: x['rule'] == period, self.__interface['sampling']))[0]
 
         if export:
             title_text = None
         else:
-            title_text = "{} Series decomposition".format(params['title'])
+            title_text = self.__interface['decomposition']['title'].format(sample['title'])
 
-        params = switch.get(period)
-
-        series = df.resample(params['sample']).mean().dropna(subset=['speed'])
-        decomposition = sm.tsa.seasonal_decompose(series, period=params['period'], model=model)
+        series = timeseries.resample(dataset=df, rule=sample['rule'])[['mean']].dropna(subset=['mean'])
+        decomposition = sm.tsa.seasonal_decompose(series, period=eval(sample['period']), model=model)
         
         self.trend = decomposition.trend
         self.seasonal = decomposition.seasonal
@@ -180,7 +174,7 @@ class WindSpeedTower():
             series = go.Scatter(
                         name='series',
                         x=series.index,
-                        y=series.speed,
+                        y=series['mean'],
                         mode='lines',
                         line=dict(color=next(color_cycle)))
 
@@ -204,7 +198,7 @@ class WindSpeedTower():
                         line=dict(color=next(color_cycle)))
 
             fig = make_subplots(rows=5, cols=1,
-                                vertical_spacing=0.015,
+                                vertical_spacing=0.025,
                                 shared_yaxes=True,
                                 shared_xaxes=True)
 
@@ -218,10 +212,10 @@ class WindSpeedTower():
             fig.add_trace(seasonal, row=3, col=1)
             fig.add_trace(resid, row=4, col=1)
 
-            fig.update_yaxes(title_text="Time Series", row=1, col=1)
-            fig.update_yaxes(title_text="Trend", row=2, col=1)
-            fig.update_yaxes(title_text="Seasonal", row=3, col=1)
-            fig.update_yaxes(title_text="Residue", row=4, col=1)
+            fig.update_yaxes(title_text=self.__interface['decomposition']['yaxis']['title'], row=1, col=1)
+            fig.update_yaxes(title_text=self.__interface['decomposition']['yaxis']['trend'], row=2, col=1)
+            fig.update_yaxes(title_text=self.__interface['decomposition']['yaxis']['season'], row=3, col=1)
+            fig.update_yaxes(title_text=self.__interface['decomposition']['yaxis']['residue'], row=4, col=1)
 
             if overlay_trend:
                 trend = go.Scatter(
@@ -229,7 +223,7 @@ class WindSpeedTower():
                         x=decomposition.trend.index,
                         y=decomposition.trend,
                         mode='lines',
-                        opacity=0.5,
+                        opacity=0.8,
                         line=dict(color=next(color_cycle)))
                 fig.add_trace(trend, row=1, col=1)
 
@@ -315,6 +309,49 @@ class WindSpeedTower():
             for t in pacf_traces: fig.add_trace(t, row=2, col=2)
             fig.show()
 
+    def build_sets(self, period:str, split: str, plot: bool=False, export:bool=False):
+        '''
+        Returns a dataset, a trainingset and a testset based on a period
+        and a split refererence. 
+        '''
+        
+        df = self.data.copy()
+        sample_info = list(filter(lambda x: x['rule'] == period, self.__interface['sampling']))[0]
+        self.dataset = timeseries.resample(dataset=df, rule=period)
+
+        if export:
+            title_text = None
+        else:
+            title_text = self.__interface['train']['title']
+
+        splittime = datetime.strptime(split, sample_info['idx_fmt'])
+        self.trainset = self.dataset.loc[(self.dataset.index < splittime)]
+        self.testset  = self.dataset.loc[(self.dataset.index >= splittime)]
+
+        if plot:
+            train = go.Scatter(
+                        name=self.__interface['train']['train'],
+                        x=self.trainset.index,
+                        y=self.trainset['mean'],
+                        mode='lines',
+                        line=dict(color=next(color_cycle)))
+
+            #Appends last element of training to connect line
+            testset_plot = self.trainset.iloc[-1:].append(self.testset)    
+            test = go.Scatter(
+                        name=self.__interface['train']['test'],
+                        x=testset_plot.index,
+                        y=testset_plot['mean'],
+                        mode='lines',
+                        line=dict(color=next(color_cycle)))
+
+            fig = go.Figure()
+            fig.add_trace(train)
+            fig.add_trace(test)
+            fig.update_layout(title_text=title_text,
+                                xaxis_showticklabels=True)
+
+            fig.show()
 
     def reindex_series(self):
         '''Void function to reindex time series between begin and end'''

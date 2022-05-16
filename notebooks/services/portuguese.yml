@@ -24,12 +24,12 @@ sampling:
   - name: "hora"
     rule: "h"
     period: "365*24"
-    title: "Horário"
+    title: "Horária"
     idx_fmt: "%Y-%m-%dT%H:%M:%S"
   - name: "dia"
     rule: "d"
     period: "365"
-    title: "Diário"
+    title: "Diária"
     idx_fmt: "%Y-%m-%d"
   - name: "semana"
     rule: "w"
@@ -68,3 +68,7 @@ decomposition:
     trend: Tendência
     season: Sazonalidade
     residue: Resíduo
+train:
+  title: Datasets de Treino e Teste
+  train: treino
+  test: teste
