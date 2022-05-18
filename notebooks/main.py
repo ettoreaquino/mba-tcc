@@ -337,7 +337,7 @@ class WindSpeedTower():
                         line=dict(color=next(color_cycle)))
 
             #Appends last element of training to connect line
-            testset_plot = self.trainset.iloc[-1:].append(self.testset)    
+            testset_plot = pd.concat([self.trainset.iloc[-1:], self.testset])
             test = go.Scatter(
                         name=self.__interface['train']['test'],
                         x=testset_plot.index,
