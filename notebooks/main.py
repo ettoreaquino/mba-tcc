@@ -317,7 +317,7 @@ class WindSpeedTower():
         
         df = self.data.copy()
         sample_info = list(filter(lambda x: x['rule'] == period, self.__interface['sampling']))[0]
-        self.dataset = timeseries.resample(dataset=df, rule=period)
+        self.dataset = timeseries.resample(dataset=df, rule=period).interpolate(method='linear')
 
         if export:
             title_text = None
