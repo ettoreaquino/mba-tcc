@@ -154,7 +154,8 @@ class WindSpeedTower():
         
         fig.show()
 
-    def decompose(self, period:str, model: str, plot:bool=True, overlay_trend:bool=False, export:bool=False):
+    def decompose(self, period:str, model: str, diff: int=0, plot:bool=True, overlay_trend:bool=False, export:bool=False):
+        
         df = self.data.copy()
         sample = list(filter(lambda x: x['rule'] == period, self.__interface['sampling']))[0]
 
@@ -162,6 +163,9 @@ class WindSpeedTower():
             title_text = None
         else:
             title_text = self.__interface['decomposition']['title'].format(sample['title'])
+
+        if diff > 0:
+            df = df.diff(diff)
 
         series = timeseries.resample(dataset=df, rule=sample['rule'])[['mean']].dropna(subset=['mean'])
         decomposition = sm.tsa.seasonal_decompose(series, period=eval(sample['period']), model=model)
@@ -229,8 +233,8 @@ class WindSpeedTower():
 
             fig.show()
 
-    def stationarity(self, period:str, verbose:bool=False, plot:bool=True, export:bool=False):
-
+    def stationarity(self, period:str, diff: int=0, verbose:bool=False, plot:bool=True, export:bool=False):
+        df = self.data.copy()
         switch = {
             'h': {'sample': 'h','title': 'Hourly'},
             'd': {'sample': 'd','title': 'Daily'},
@@ -241,17 +245,25 @@ class WindSpeedTower():
         if export:
             title_text = None
         else:
-            title_text = "Stationarity Analysis"
+            title_text = "Análise de Estacionariedade"
 
         params = switch.get(period)
 
-        series = self.data.copy().resample(params['sample']).mean().dropna(subset=['speed'])
+        if diff > 0:
+            df = df.diff(diff)
+
+        series = df.resample(params['sample']).mean().dropna(subset=['speed'])
         test = sm.tsa.stattools.adfuller(series, autolag='AIC')
 
         self.adf = test[0]
         self.p_value=test[1]
+        self.usedlag = test[2]
+        self.nobs = test[3]
         self.rejected_ho = True if self.adf < test[4]['5%'] else False
-        stationarity = 'Time Series is STATIONARY' if self.rejected_ho else 'Time Series is NON-STATIONARY' 
+        self.acf_array = sm.tsa.stattools.acf(series.dropna(), alpha=0.05)
+        self.pacf_array = sm.tsa.stattools.pacf(series.dropna(), alpha=0.05)
+        
+        stationarity = 'Série Temporal ESTACIONÁRIA' if self.rejected_ho else 'Série Temporal NÃO-ESTACIONÁRIA' 
 
 
         if verbose:
@@ -259,25 +271,28 @@ class WindSpeedTower():
             print('{:^57s}'.format('Augmented Dickey-Fuller Test'))
             print('{:^57s}'.format(params['title'].upper()))
             print('---------------------------------------------------------')
-            print('ADF Statistic:')
+            print('Estatística ADF:')
             print('{adf}'.format(adf=self.adf))
             print('---------------------------------------------------------')
-            print('p-value:')
+            print('p-valor:')
             print('{p_value}'.format(p_value=self.p_value))
+            print('---------------------------------------------------------')
+            print('lags utilizados:')
+            print('{usedlag}'.format(usedlag=self.usedlag))
+            print('---------------------------------------------------------')
+            print('N observações utilizadas:')
+            print('{nobs}'.format(nobs=self.nobs))
             print('=========================================================')
-            print('Critical Values:')
+            print('Valores Críticos:')
             for k, v in test[4].items():
                 print('\t{}: {}'.format(k,v))
             print('---------------------------------------------------------')
-            print('Rejected Null Hypothesis? - {rejected_ho}'.format(rejected_ho = self.rejected_ho))
+            print('Hipótese Nula Rejeitada? - {rejected_ho}'.format(rejected_ho = self.rejected_ho))
             print(stationarity)
             print('=========================================================')
 
         if plot:
             color_cycle = theme.get_colors()
-
-            acf_array = sm.tsa.stattools.acf(series.dropna(), alpha=0.05)
-            pacf_array = sm.tsa.stattools.pacf(series.dropna(), alpha=0.05)
 
             series_trace = go.Scatter(name='series',
                                       x=series.index,
@@ -285,17 +300,16 @@ class WindSpeedTower():
                                       mode='lines',
                                       line=dict(color=next(color_cycle)))
 
-            acf_traces = _build_traces(corr_array=acf_array)
-            pacf_traces = _build_traces(corr_array=pacf_array)
-
+            acf_traces = _build_traces(corr_array=self.acf_array)
+            pacf_traces = _build_traces(corr_array=self.pacf_array)
 
             fig = make_subplots(rows=2, cols=2,
                                 vertical_spacing=0.075,
                                 specs=[[{"colspan": 2}, None],
                                        [{},{}]],
-                                subplot_titles=("{} Series<br>Dickey-Fuller p-value: {}".format(params['title'], round(self.p_value,4)),
-                                                "Autocorrelation",
-                                                "Partial Autocorrelation"))
+                                subplot_titles=("{} Série<br>Dickey-Fuller p-valor: {}".format(params['title'], round(self.p_value,4)),
+                                                "Autocorrelação",
+                                                "Autocorrelação Parcial"))
 
             fig.update_layout(height=1000,
                             title_text=title_text,
@@ -309,7 +323,7 @@ class WindSpeedTower():
             for t in pacf_traces: fig.add_trace(t, row=2, col=2)
             fig.show()
 
-    def build_sets(self, period:str, split: str, plot: bool=False, export:bool=False):
+    def build_sets(self, period:str, split: str, diff: int=0, plot: bool=False, export:bool=False):
         '''
         Returns a dataset, a trainingset and a testset based on a period
         and a split refererence. 
@@ -317,6 +331,10 @@ class WindSpeedTower():
         
         df = self.data.copy()
         sample_info = list(filter(lambda x: x['rule'] == period, self.__interface['sampling']))[0]
+
+        if diff > 0:
+            df = df.diff(diff)
+
         self.dataset = timeseries.resample(dataset=df, rule=period).interpolate(method='linear')
 
         if export:
@@ -362,7 +380,7 @@ class WindSpeedTower():
         df = self.data.reindex(idx)
         
         self.data = df
-        print('Tower data reindexed between {} and {}'.format(min_time, max_time))
+        print('Dados da torre reindexados entre {} e {}'.format(min_time, max_time))
 
     def save(self):
 
