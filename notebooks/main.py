@@ -13,6 +13,7 @@ from plotly.subplots import make_subplots
 from services import (translation, theme, timeseries)
 
 color_cycle = theme.get_colors()
+color_list = theme.get_color_list()
 
 def load_tower(pickefile: str):
 
@@ -40,12 +41,13 @@ def _build_traces(corr_array):
         traces.append(go.Scatter(x=(x,x),
                                  y=(0,corr_array[0][x]),
                                  mode='lines',
-                                 line_color='#3f3f3f'))
+                                 line_color='rgba(12,44,132, 1)'))
 
     traces.append(go.Scatter(x=np.arange(len(corr_array[0])),
                              y=corr_array[0],
                              mode='markers',
-                             marker_color='#1f77b4',
+                             marker_color='rgb(34,94,168)',
+                             #marker_color='#1f77b4',
                              marker_size=10))
     traces.append(go.Scatter(x=np.arange(len(corr_array[0])),
                              y=upper_y,
@@ -54,7 +56,8 @@ def _build_traces(corr_array):
     traces.append(go.Scatter(x=np.arange(len(corr_array[0])),
                              y=lower_y, 
                              mode='lines',
-                             fillcolor='rgba(32, 146, 230,0.3)',
+                             fillcolor='rgba(34,94,168, 0.3)',
+                             #fillcolor='rgba(32, 146, 230,0.3)',
                              fill='tonexty',
                              line_color='rgba(255,255,255,0)'))
     return traces
@@ -298,7 +301,7 @@ class WindSpeedTower():
                                       x=series.index,
                                       y=series.speed,
                                       mode='lines',
-                                      line=dict(color=next(color_cycle)))
+                                      line=dict(color=color_list[4]))
 
             acf_traces = _build_traces(corr_array=self.acf_array)
             pacf_traces = _build_traces(corr_array=self.pacf_array)
@@ -352,7 +355,7 @@ class WindSpeedTower():
                         x=self.trainset.index,
                         y=self.trainset['mean'],
                         mode='lines',
-                        line=dict(color=next(color_cycle)))
+                        line=dict(color=color_list[4]))
 
             #Appends last element of training to connect line
             testset_plot = pd.concat([self.trainset.iloc[-1:], self.testset])
@@ -361,7 +364,7 @@ class WindSpeedTower():
                         x=testset_plot.index,
                         y=testset_plot['mean'],
                         mode='lines',
-                        line=dict(color=next(color_cycle)))
+                        line=dict(color=color_list[1]))
 
             fig = go.Figure()
             fig.add_trace(train)
